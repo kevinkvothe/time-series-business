@@ -1,0 +1,104 @@
+ 
+---
+title: "Predicción con series temporales"
+author: "Kevin Craig Alisauskas"
+date: "`r Sys.Date()`"
+output:
+  pdf_document:
+    toc: yes
+    toc_depth: 2
+    number_sections: yes
+subtitle: Ciencia de Datos en Negocio, Máster Ciencia de Datos
+---
+
+```{r include = FALSE}
+knitr::opts_chunk$set(warning = FALSE, tidy = TRUE)
+
+# fig.width = 8, fig.height = 6,
+```
+
+
+```{r include=FALSE}
+# Especificamos las librerías necesarias
+
+packages = c("tidyverse", "knitr", 'readr', 'lubridate', 'dplyr', 'tidyr', 'forecast', 'seasonal', 'readxl')
+
+package.check <- lapply(packages, FUN = function(x) {
+  if (!require(x, character.only = TRUE)) {
+    install.packages(x, dependencies = TRUE)
+    library(x, character.only = TRUE)
+  }
+})
+
+```
+
+# Introducción y descripción.
+
+## Enunciado
+
+En el archivo adjunto series.xlsx bajo tu nombre hay una serie medida mensualmente o trimestralmente para un determinado periodo temporal (la columna junto a los valores representa, en un formato no homogéneo, las fechas a las que corresponde cada uno de los valores). La mayoría de las series corresponden a la Comunidad Valenciana, hay unas pocas de España.
+
+Además del archivo de series.xlsx puedes encontrar otros archivos xlsx, que contienen algunos regresores potenciales para las series, útiles si especificas un modelo regARIMA. En el nombre de cada uno de estos archivos se indica: 
+* el año de inicio de la serie para los cuales los regresores del correspondiente archivo son de utilidad.
+* la frecuencia (mensual o trimestral) asociada a los regresores.
+* si deberían emplearse para series de España (ES) o de la Comunidad Valenciana.
+
+Tu objetivo en esta tarea consiste en predecir (sobre la serie original y para la serie desestacionalizada) los valores de tu serie para 2018 (con un horizonte de 1 mes/trimestre, 2 meses/trimestres, …..., 12 meses/4 trimestres) entre un conjunto de alternativas. Selecciona al menos un modelo de la clase ETS (librería forecast), un modelo de la clase regARIMA (librería seasonal) y un modelo de los considerados sencillos. 
+
+Para seleccionar modelos adecuados dentro de cada clase, utiliza los valores de la serie hasta 2017 (prediciendo secuencialmente, y para los diferentes horizontes, los valores de 2016 y 2017, utilizando exclusivamente los valores previos de la serie) y genera las predicciones para 2018 con todos ellos. Valora la calidad predictiva de las diferentes especificaciones en el conjunto de comprobación para selección y en el conjunto de test para cada uno de los horizontes. En las especificaciones regARIMA es necesario considerar, además de los regresores incluidos en los archivos suministrados, los regresores incluidos en el propio programa como la pascua móvil (Easter) o el ciclo semanal (Trading day).
+Refleja todos los resultados alcanzados, con una justificación adecuada de los mismos, en un informe.
+
+# Carga de Datos y análisis introductorio.
+
+Nuestra serie muestra la evolución del IBC (Importaciones en Bienes de Consumo en millones de euros) entre 2006 y 2018, de forma mensual, es decir, que la periodicidad esperada será anual.
+
+Comenzamos cargando los datos, almacenándolos como una serie temporal y realizando un plot.
+
+```{r}
+
+series <- read_excel("time_series.xlsx", col_names = c("Fecha", "IBC"), skip = 4)
+series_ts <- ts(series[['IBC']], start = c(2006, 1, 1), frequency = 12)
+
+ggplot2::autoplot(series_ts, colour = "red") + ggtitle("Serie temporal (IBC entre 2006 y 2018)") + xlab("Tiempo") + ylab("IBC")
+
+```
+
+Observamos la tendencia lineal ascendente (sobretodo a partir de 2010) y una cierta estacionalidad. La varianza parece constante (no tenemos heterocedasticidad), por lo que trataremos con un esquema de tipo aditivo $$ X_t \sim T_t + S_t + E_t $$.
+
+Ahora mostramos la serie descompuesta con el esquema Aditivo, mostramos la serie, la tendencia, la estacionalidad (El resultado de sustraer la tendencia a la serie original) y los residuos (resultado de sustraer la tendencia y la componente estacional).
+
+```{r}
+
+ggplot2::autoplot(fit_add <- stl(series_ts, s.window = "periodic")) + ggtitle("Descomposición de la serie temporal como Aditiva")
+
+```
+
+Como vemos, la tendencia tiene un marcado carácter lineal, con algunas componentes que seguramente sean sucesos particulares (especialmente la bajada en 2009, en la que se registra el nivel más bajo del PIB). La componente estacional se muestra claramente, teniendo ciclos cada 2 años (al ser tener frecuencia anual...) muy marcados. Por último, los residuos parecen aleatorios, pero vamos a realizar un análisis de ellos para verlo claramente.
+
+```{r}
+
+checkresiduals(fit_add$time.series[, 3])
+
+```
+
+Observamos en la función de autocorrelación algunos "palos significativos", es posible que corresponndan a estacionalidad sistemática (semana santa...). Por otra parte, la distribución de residuos se asemeja a una gaussiana, indicando una descomposición satisfactoria.
+
+# Análisis y predicción.
+
+A la hora de analizar la serie o modelizarla, tomaremos tanto la serie original como la serie desestacionalizada. Recordamos que la serie original era *series_ts*, a la desestacionalizada la llamaremos *seas_ts*. Ahora la crearemos con el paquete _seasonal_ y las compararemos.
+
+```{r}
+
+seas_ts <- seas(series_ts)
+plot(seas_ts)
+
+```
+
+Comprobamos que la nueva serie desestacionalizada resulta mucho más suave al quitar tanto la estacionalidad como los efectos de calendario.
+
+## Modelos sencillos.
+
+Vamos a empezar a predecir para modelos sencillos. Antes de ello
+
+
+
