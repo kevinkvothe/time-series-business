@@ -96,9 +96,45 @@ plot(seas_ts)
 
 Comprobamos que la nueva serie desestacionalizada resulta mucho más suave al quitar tanto la estacionalidad como los efectos de calendario.
 
+## Split en train, validacion y test.
+
+Antes de empezar a predecir necesitamos dividir en conjuntos de train, validación y test. Usaremos la serie hasta 2016 como conjunto train, los años 2016 y 2017 como validación (secuencial, se irán agregando datos a train para generar predicciones y seleccionar los mejores modelos) y el año 2018 como test. Todo esto lo haremos tanto para la serie original como desestacionalizada.
+
+Serie original:
+
+```{r}
+
+# Extraemos la serie temporal del calculo desestacionalizado.
+seas_ts <- seas_ts$data[, 1]
+
+seas_ts_train <- window(seas_ts, end = c(2015, 12))
+seas_ts_val <- window(seas_ts, start = c(2016, 1), end = c(2017, 12))
+seas_ts_test <- window(seas_ts, start = c(2018, 1))
+
+cierto <- length(seas_ts) == length(seas_ts_train) + length(seas_ts_val) + length(seas_ts_test)
+print(paste0("La longitud de la serie desestacionalizada es igual a la suma de las series train, validación y test: ", cierto))
+
+```
+
+Serie desestacionalizada:
+
+```{r}
+
+ts_train <- window(series_ts, end = c(2015, 12))
+ts_val <- window(series_ts, start = c(2016, 1), end = c(2017, 12))
+ts_test <- window(series_ts, start = c(2018, 1))
+
+cierto <- length(series_ts) == length(ts_train) + length(ts_val) + length(ts_test)
+print(paste0("La longitud de la serie original es igual a la suma de las series train, validación y test: ", cierto))
+
+```
+
+*Nota*: Para valorar la precisión de los métodos realizaremos una predicción secuencial con el conjunto de validación con cada modelo, realizando un total de 24 modelos (2 años) y obteniendo su suma de error cuadrático (RSS, residual sum of squares), esta técnica es llamada Hold-Out Cross Validation, en concreto Leave-One-Out, porque realizamos la predicción para un único item de validación (mes).
+
+Vamos a utilizar la función *CV* del paquete _forecast_ para realizar esta validación.
+
 ## Modelos sencillos.
 
-Vamos a empezar a predecir para modelos sencillos. Antes de ello
-
+Vamos a empezar a predecir para modelos sencillos. Usaremos las dos series y los modelos naïve estacional y de deriva (drift), que son simples sin llegar a ser totalmente absurdos.
 
 
