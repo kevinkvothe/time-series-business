@@ -288,7 +288,7 @@ CV_error_rega <- function(train, val, reg, fixed_params, test = FALSE){
   if(test){
     
     mod <- seas(train, xreg = reg, regression.aictest = fixed_params)
-    mod_pred <- series(m, "forecast.forecasts")[1:12]
+    mod_pred <- series(mod, "forecast.forecasts")[1:12]
     
     res <- (mod_pred - val[1:12])^2
     
@@ -328,10 +328,6 @@ En esta ocasión nos limitaremos a comparar entre un modelo con regresores y el 
 # Cargamos los datos de regresores a partir del año 2006 y seleccionamos las columnas adecuadas.
 reg <- ts(read_excel("./Tarea2/regresores_mensuales_2006.xlsx")[, c(2, 3, 5, 7)], start = c(2006, 1), frequency = 12)
 
-
-#respuesta
-
-
 # regArima method con regresores y corrección de "trading day".
 reg_error <- CV_error_rega(ts_train, ts_val, reg = reg, fixed_params = c("td"))
 
@@ -352,7 +348,7 @@ Como vemos, resultado teniendo en cuenta la pascua (easter) es levemente mejor.
 Ahora procederemos a evaluar los resultados globales de los 3 métodos seleccionados.
 
 ```{r}
- 
+
 print(data.frame("Error método deriva" = deriva_error, "Error ets Multiplicativo" = ets_error_mult, "Error regArima Easter" = reg_error_easter))
 
 ```
@@ -372,5 +368,46 @@ print(data.frame("Error método deriva" = deriva_error, "Error ets Multiplicativ
 
 ```
 
-Observamos que el modelo regArima no ofrece mejoras respecto al ets.
-Si realizamos un plot comparando las predicciones de los 3
+Observamos que el modelo regArima sigue siendo el de menor error, menor incluso que con el conjunto de validación por Cross Validation.
+
+Si realizamos un plot comparando las predicciones de los 3 podremos verlo de forma más clara.
+
+```{r}
+
+deriva_mod <- rwf(train_val, h = 12, drift = TRUE)
+deriva_pred <- deriva_mod$mean[1:12]
+
+ets_mod <- ets(train_val, model = "MMN")
+ets_pred <- forecast(ets_mod, h = 12)$mean[1:12]
+
+rega_mod <- seas(train_val, xreg = reg, regression.aictest = c("td", "easter"))
+rega_pred <- series(rega_mod, "forecast.forecasts")[1:12]
+
+x <- seq(ymd('2018-01-01'),ymd('2018-12-01'),by='month')
+
+plot_df <- data.frame("date" = x, "deriva" = deriva_pred, "ets" = ets_pred, "regArima" = rega_pred, "original" = ts_test[1:12])
+plot_df_gathered <- gather(plot_df, key = "type", value = "prediction", -date)
+
+ggplot(plot_df_gathered, aes(x = date, y = prediction, colour = type)) + geom_line() + ggtitle("Predicción para 2018 de los diferentes métodos escogidos")
+
+```
+
+Observamos de forma más clara como el método regArima es el más efectivo a la hora de predecir el año 2018, sin embargo, hemos notado que en esta ocasión (aunque el error en validación es mayor que el del método de la deriva) el método snaive (seasonal naive) puede explicar muy bien los datos del 2018, mostrémoslo con su error test y un plot comparativo.
+
+```{r}
+
+snaive_error <- CV_error_simp(train_val, ts_test, snaive, test = TRUE)
+
+print(paste0("El error de test del método snaive es: ", round(snaive_error, 2)))
+
+snaive_mod <- snaive(train_val, h = 12)
+snaive_pred <- snaive_mod$mean[1:12]
+
+plot_df <- data.frame("date" = x, "regArima" = rega_pred, "original" = ts_test[1:12], "snaive" = snaive_pred)
+plot_df_gathered <- gather(plot_df, key = "type", value = "prediction", -date)
+
+ggplot(plot_df_gathered, aes(x = date, y = prediction, colour = type)) + geom_line() + ggtitle("Predicción para 2018 de los diferentes métodos escogidos")
+
+```
+
+Observamos como el snaive se ajusta todavía mejor que el regArima a la predicción de 2018. Con esto concluímos que en predicciones tan estacionales como estas (desde el análisis inicial observamos un carácter estacional muy marcado) no siempre conviene buscar métodos muy complejos para predecir adecuadamente los datos, si no que métodos más simples pueden dar resultados satisfactorios. Esto puede ser de utilidad cuando el calculo sea muy costoso especialmente.
