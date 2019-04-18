@@ -131,11 +131,13 @@ print(paste0("La longitud de la serie original es igual a la suma de las series 
 
 *Nota*: Para valorar la precisión de los métodos realizaremos una predicción secuencial con el conjunto de validación con cada modelo, realizando un total de 24 modelos (2 años) y obteniendo su suma de error cuadrático (RSS, residual sum of squares), esta técnica es llamada Hold-Out Cross Validation, en concreto Leave-One-Out, porque realizamos la predicción para un único item de validación (mes) cada vez.
 
-Vamos crear una función para realizar el cálculo:
+## Modelos sencillos.
+
+Primero vamos crear una función para realizar el cálculo del error de Cross Validation con las funciones sencillas:
 
 ```{r}
 
-CV_error <- function(train, val, modelo, fixed_params = NaN, test = FALSE){
+CV_error_simp <- function(train, val, modelo, fixed_params = NaN, test = FALSE){
   
   # Por defecto calculamos el error de validación, si en su lugar quisiéramos calcular el error test...
   if(test){
@@ -176,16 +178,99 @@ CV_error <- function(train, val, modelo, fixed_params = NaN, test = FALSE){
 
 ```
 
-
-## Modelos sencillos.
-
 Vamos a empezar a predecir para modelos sencillos. Usaremos las dos series y los modelos naïve estacional y de deriva (drift), que son simples sin llegar a ser totalmente absurdos.
 
 ```{r}
 
-fc <- CV_error(append(seas_ts_train, seas_ts_val), seas_ts_test, snaive, test = TRUE)
-fc
+# Seasonal Naive method.
+seas_snaive_error <- CV_error_simp(seas_ts_train, seas_ts_val, snaive)
+snaive_error <- CV_error_simp(ts_train, ts_val, snaive)
+
+# Método de la deriva
+seas_deriva_error <- CV_error_simp(seas_ts_train, seas_ts_val, rwf, fixed_params = list(drift = TRUE))
+deriva_error <- CV_error_simp(ts_train, ts_val, rwf, fixed_params = list(drift = TRUE))
+
+
+res_table <- data.frame("Error snaive desestacionalizada" =  seas_snaive_error, "Error snaive original" = snaive_error, "Error deriva desestacionlizada" = seas_deriva_error, "Error deriva original" = deriva_error)
+
+print(res_table)
+```
+
+Al analizar los RSS de cada método sobre cada una de las dos series, observamos que los errores en la serie desestacoinlizada son mucho menores, lógicamente, ya que es una serie mucho mas suave y sencilla de predecir. En cuanto a la precisión, notamos que el error tanto en la serie original como en la desestacionlizada del método de la deriva es menor, por lo que nos quedaremos con ese método de cara a la comparación final.
+
+## Modelos de clase ETS.
+
+Vamos crear una función para realizar el cálculo con la función ets:
+
+```{r}
+
+CV_error_ets <- function(train, val, modelo, fixed_params = NaN, test = FALSE){
+  
+  # Por defecto calculamos el error de validación, si en su lugar quisiéramos calcular el error test...
+  if(test){
+    
+    ifelse(is.na(fixed_params), params <- list(train), params <- append(list(train), fixed_params))
+    
+    mod <- do.call(modelo, params)
+    mod_pred <- forecast(mod, h = 12)
+    res <- (mod_pred$mean - val[1:12])^2
+    
+  }
+  else{
+    
+    # Fijamos los parámetros
+    ifelse(is.na(fixed_params), params <- list(train), params <- append(list(train), fixed_params))
+  
+    mod <- do.call(modelo, params)
+    mod_pred <- forecast(mod, h = 1)
+    res <- (mod_pred$mean[1] - val[1])^2
+  
+    # Realizamos un bucle sobre cada mes del conjunto de validación
+    for(i in 1:(length(val) - 1)){
+  
+      # Creamos los parámetros
+      new_train <- append(train, val[1:i])
+      ifelse(is.na(fixed_params), params <- list(new_train), params <- append(list(new_train), fixed_params))
+  
+      # Creamos el modelo
+      mod <- do.call(modelo, params)
+      mod_pred <- forecast(mod, h = 1)
+      res <- c(res, (mod_pred$mean[1] - val[i + 1])^2)
+    
+    }
+    
+  }
+  
+  # Devolvemos la suma de errores al cuadrado.
+  return(sum(res))
+  
+}
 
 ```
 
+Ahora vamos a entrar en métodos de alisado exponencial (ETS = Error, Trend, Seasonal), una forma de media móvil que tiene en cuenta cada uno de los 3 componentes en los que consideramos, se descompone una serie temporal. 
+
+A partir del análisis previo de la serie, hemos considerado que tratamos un esquema Aditivo tanto en Tendencia como en Estacionalidad, por lo que probaremos variando la clase de Error entre Aditivo y Multiplicativo, además, aunque en la práctica no tiene sentido, ya que el modelo va variando según agregamos los datos de validación, realizaremos un ajuste automático comparativo.
+
+```{r}
+
+# ETS method (Error = Aditivo, Trend = Aditivo, Seasonal = Aditivo, aunque en la serie desestacionalizada la compoenente Seasonal habrá de ser Nula).
+seas_ets_error <- CV_error_ets(seas_ts_train, seas_ts_val, ets, fixed_params = list("AAN"))
+ets_error <- CV_error_ets(ts_train, ts_val, ets, fixed_params = list("AAN"))
+
+# ETS method (Error = Multiplicativo, Trend = Multiplicativo, Seasonal = Aditivo, aunque en la serie desestacionalizada la compoenente Seasonal habrá de ser Nula).
+seas_ets_error_mult <- CV_error_ets(seas_ts_train, seas_ts_val, ets, fixed_params = list("MMN"))
+ets_error_mult <- CV_error_ets(ts_train, ts_val, ets, fixed_params = list("MMN"))
+
+# ETS method Ajuste Automático.
+seas_ets_error_aut <- CV_error_ets(seas_ts_train, seas_ts_val, ets)
+ets_error_aut <- CV_error_ets(ts_train, ts_val, ets)
+
+res_table <- data.frame("Error ets desestacionalizada" =  seas_ets_error, "Error ets original" = ets_error, "Error ets desestacionlizada mult" = seas_ets_error_mult, "Error ets original mult" = ets_error_mult, "Error ets desestacionalizada automatico" = seas_ets_error_aut, "Error ets original automatico" = ets_error_aut)
+
+print(res_table)
+
+```
+
+Observamos los errores en la serie desestacionalizada mucho más reducidos, como en los casos sencillos. En cuanto a la serie original, observamos cierta mejora al usar un esquema multiplicativo tanto para el error como para la tendencia. También cabe notar que el ajuste automático para cada iteración no introduce ninguna mejora respecto al MMN. Así pues, nos quedamos con un esquema Multiplicativo-Multiplicativo-Dependiente (el término dependiente corresponde a Nulo en el caso de validación, ya que perdemos estacionalizad al introducir términos no múltiplos de la estacionalizad original, 12, y a Aditivo en el caso de test, ya que no tenemos heterocedasticidad).
 
