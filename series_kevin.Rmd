@@ -100,7 +100,7 @@ Comprobamos que la nueva serie desestacionalizada resulta mucho más suave al qu
 
 Antes de empezar a predecir necesitamos dividir en conjuntos de train, validación y test. Usaremos la serie hasta 2016 como conjunto train, los años 2016 y 2017 como validación (secuencial, se irán agregando datos a train para generar predicciones y seleccionar los mejores modelos) y el año 2018 como test. Todo esto lo haremos tanto para la serie original como desestacionalizada.
 
-Serie original:
+Serie desestacionalizada:
 
 ```{r}
 
@@ -116,7 +116,7 @@ print(paste0("La longitud de la serie desestacionalizada es igual a la suma de l
 
 ```
 
-Serie desestacionalizada:
+Serie original:
 
 ```{r}
 
@@ -129,12 +129,63 @@ print(paste0("La longitud de la serie original es igual a la suma de las series 
 
 ```
 
-*Nota*: Para valorar la precisión de los métodos realizaremos una predicción secuencial con el conjunto de validación con cada modelo, realizando un total de 24 modelos (2 años) y obteniendo su suma de error cuadrático (RSS, residual sum of squares), esta técnica es llamada Hold-Out Cross Validation, en concreto Leave-One-Out, porque realizamos la predicción para un único item de validación (mes).
+*Nota*: Para valorar la precisión de los métodos realizaremos una predicción secuencial con el conjunto de validación con cada modelo, realizando un total de 24 modelos (2 años) y obteniendo su suma de error cuadrático (RSS, residual sum of squares), esta técnica es llamada Hold-Out Cross Validation, en concreto Leave-One-Out, porque realizamos la predicción para un único item de validación (mes) cada vez.
 
-Vamos a utilizar la función *CV* del paquete _forecast_ para realizar esta validación.
+Vamos crear una función para realizar el cálculo:
+
+```{r}
+
+CV_error <- function(train, val, modelo, fixed_params = NaN, test = FALSE){
+  
+  # Por defecto calculamos el error de validación, si en su lugar quisiéramos calcular el error test...
+  if(test){
+    
+    ifelse(is.na(fixed_params), params <- list(train, h = 12), params <- append(list(train, h = 12), fixed_params))
+    
+    mod <- do.call(modelo, params)
+    res <- (mod$mean - val[1:12])^2
+    
+  }
+  else{
+    
+    # Fijamos los parámetros
+    ifelse(is.na(fixed_params), params <- list(train, h = 1), params <- append(list(train, h = 1), fixed_params))
+  
+    mod <- do.call(modelo, params)
+    res <- (mod$mean[1] - val[1])^2
+  
+    # Realizamos un bucle sobre cada mes del conjunto de validación
+    for(i in 1:(length(val) - 1)){
+  
+      # Creamos los parámetros
+      new_train <- append(train, val[1:i])
+      ifelse(is.na(fixed_params), params <- list(new_train, h = 1), params <- append(list(new_train, h = 1), fixed_params))
+  
+      # Creamos el modelo
+      mod <- do.call(modelo, params)
+      res <- c(res, (mod$mean[1] - val[i + 1])^2)
+    
+    }
+    
+  }
+  
+  # Devolvemos la suma de errores al cuadrado.
+  return(sum(res))
+  
+}
+
+```
+
 
 ## Modelos sencillos.
 
 Vamos a empezar a predecir para modelos sencillos. Usaremos las dos series y los modelos naïve estacional y de deriva (drift), que son simples sin llegar a ser totalmente absurdos.
+
+```{r}
+
+fc <- CV_error(append(seas_ts_train, seas_ts_val), seas_ts_test, snaive, test = TRUE)
+fc
+
+```
 
 
