@@ -288,7 +288,7 @@ CV_error_rega <- function(train, val, reg, fixed_params, test = FALSE){
   if(test){
     
     mod <- seas(train, xreg = reg, regression.aictest = fixed_params)
-    mod_pred <- series(mod, "forecast.forecasts")[1:12]
+    mod_pred <- series(mod, "forecast.forecasts", verbose = FALSE)[1:12]
     
     res <- (mod_pred - val[1:12])^2
     
@@ -307,7 +307,7 @@ CV_error_rega <- function(train, val, reg, fixed_params, test = FALSE){
 
       # Creamos el modelo
       mod <- seas(new_train, xreg = reg, regression.aictest = fixed_params)
-      mod_pred <- series(mod, "forecast.forecasts")
+      mod_pred <- series(mod, "forecast.forecasts", verbose = FALSE)
       res <- c(res, (mod_pred[1] - val[i + 1])^2)
     
     }
@@ -381,7 +381,7 @@ ets_mod <- ets(train_val, model = "MMN")
 ets_pred <- forecast(ets_mod, h = 12)$mean[1:12]
 
 rega_mod <- seas(train_val, xreg = reg, regression.aictest = c("td", "easter"))
-rega_pred <- series(rega_mod, "forecast.forecasts")[1:12]
+rega_pred <- series(rega_mod, "forecast.forecasts", verbose = FALSE)[1:12]
 
 x <- seq(ymd('2018-01-01'),ymd('2018-12-01'),by='month')
 
